@@ -21,6 +21,10 @@
     <string name="main_bestsellers">الأكثر مبيعًا</string>
     <string name="main_new_releases">الإصدارات الجديدة</string>
 
+    <string name="main_featured_books">كتب مميزة</string>
+    <string name="main_popular_books">كتب رائجة</string>
+
+
     <string name="categories_title">الفئات</string>
 
     <string name="user_books_title">مكتبتي</string>

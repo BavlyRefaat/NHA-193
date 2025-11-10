@@ -5,17 +5,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.ripple.rememberRipple
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -27,9 +34,11 @@ import com.depi.bookdiscovery.screens.category.CategoriesScreen
 import com.depi.bookdiscovery.screens.profile.ProfileScreen
 import com.depi.bookdiscovery.screens.search.SearchScreen
 import com.depi.bookdiscovery.screens.userbooks.UserBooksScreen
-import com.depi.bookdiscovery.ui.theme.BookDiscoveryTheme
+import com.depi.bookdiscovery.ui.viewmodel.MainViewModel
+import com.depi.bookdiscovery.ui.viewmodel.MainViewModelFactory
 import com.depi.bookdiscovery.ui.viewmodel.SettingsViewModel
 import com.depi.bookdiscovery.ui.viewmodel.SettingsViewModelFactory
+import com.depi.bookdiscovery.repo.Repo
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,8 +47,12 @@ fun MainAppScreen(
     settingsDataStore: com.depi.bookdiscovery.util.SettingsDataStore,
     mainNavController: NavController,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModelFactory(settingsDataStore)
+    )
+    val mainViewModel: MainViewModel = viewModel(
+        factory = MainViewModelFactory(context, Repo())
     )
     val navController = rememberNavController()
     Scaffold(
@@ -86,7 +99,7 @@ fun MainAppScreen(
                                 else -> {}
                             }
                         },
-                        label = { Text( stringResource(id = getScreenTitleResId(screen))) },
+                        label = { Text(stringResource(id = getScreenTitleResId(screen))) },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
@@ -115,11 +128,13 @@ fun MainAppScreen(
             Modifier.padding(innerPadding)
         ) {
             composable(Screen.Main.route) {
-                MainScreen(settingsViewModel)
+                MainScreen(settingsViewModel, mainViewModel)
             }
             composable(Screen.SearchScreenRoute.route) {
+                val context = androidx.compose.ui.platform.LocalContext.current
                 val searchViewModel: com.depi.bookdiscovery.SearchViewModel = viewModel(
                     factory = com.depi.bookdiscovery.SearchViewModelFactory(
+                        context,
                         settingsDataStore
                     )
                 )

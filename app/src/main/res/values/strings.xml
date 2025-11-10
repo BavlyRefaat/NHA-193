@@ -21,6 +21,10 @@
     <string name="main_bestsellers">Bestsellers</string>
     <string name="main_new_releases">New Releases</string>
 
+    <string name="main_featured_books">Featured Books</string>
+    <string name="main_popular_books">Popular Books</string>
+
+
     <string name="categories_title">Categories</string>
 
     <string name="user_books_title">My Library</string>

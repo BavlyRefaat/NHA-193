@@ -1,19 +1,19 @@
-package com.depi.bookdiscovery
+package com.depi.bookdiscovery.ui.viewmodel
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.depi.bookdiscovery.util.SettingsDataStore
 import com.depi.bookdiscovery.repo.Repo
+import com.depi.bookdiscovery.repo.RepoService
 
-class SearchViewModelFactory(
+class MainViewModelFactory(
     private val context: Context,
-    private val settingsDataStore: SettingsDataStore
+    private val repo: RepoService
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(SearchViewModel::class.java)) {
+        if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SearchViewModel(context, Repo(), settingsDataStore) as T
+            return MainViewModel(context, repo) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

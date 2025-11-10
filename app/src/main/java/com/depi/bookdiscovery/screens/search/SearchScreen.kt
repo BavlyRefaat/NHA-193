@@ -36,6 +36,7 @@ import com.depi.bookdiscovery.components.BookCard
 import com.depi.bookdiscovery.dto.FilterOption
 import com.depi.bookdiscovery.ui.theme.BookDiscoveryTheme
 import com.depi.bookdiscovery.util.SettingsDataStore
+import com.depi.bookdiscovery.ui.viewmodel.UiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,10 +45,16 @@ fun SearchScreen(
     searchViewModel: SearchViewModel,
 ) {
     var searchText by remember { mutableStateOf("") }
-    val searchResults by searchViewModel.searchResults.collectAsStateWithLifecycle()
+    val uiState by searchViewModel.uiState.collectAsStateWithLifecycle()
     val searchHistory by searchViewModel.searchHistory.collectAsStateWithLifecycle(initialValue = emptySet())
     val listState = rememberLazyListState()
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(searchText) {
+        if (searchText.isNotEmpty()) {
+            listState.scrollToItem(0)
+        }
+    }
 
     val filterOptions = listOf(
         FilterOption("All", ""),
@@ -157,13 +164,23 @@ fun SearchScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             if (searchText.isEmpty()) {
-                Text(
-                    text = "Recent Searches",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Searches",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    if (searchHistory.isNotEmpty()) {
+                        TextButton(onClick = { searchViewModel.clearSearchHistory() }) {
+                            Text("Clear All")
+                        }
+                    }
+                }
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(searchHistory.toList().reversed()) { search ->
                         Row(
@@ -207,39 +224,68 @@ fun SearchScreen(
                     }
                 }
             } else {
-                if (searchResults.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No results found.")
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(searchResults) { book ->
-                            BookCard(book = book)
+                when (val state = uiState) {
+                    is UiState.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
                         }
-                        item {
-                            if (searchResults.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
+                    }
+
+                    is UiState.Success -> {
+                        if (state.data.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No results found.")
+                            }
+                        } else {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(state.data) { book ->
+                                    BookCard(book = book)
                                 }
+                                item {
+                                    if (state.data.isNotEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator()
+                                        }
+                                    }
+                                }
+                            }
+
+                            LaunchedEffect(listState) {
+                                snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+                                    .collect { lastVisibleItemIndex ->
+                                        if (lastVisibleItemIndex != null && lastVisibleItemIndex >= state.data.size - 5) {
+                                            searchViewModel.loadMore()
+                                        }
+                                    }
                             }
                         }
                     }
 
-                    LaunchedEffect(listState) {
-                        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-                            .collect { lastVisibleItemIndex ->
-                                if (lastVisibleItemIndex != null && lastVisibleItemIndex >= searchResults.size - 5) {
-                                    searchViewModel.loadMore()
-                                }
-                            }
+                    is UiState.Error -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(state.message)
+                        }
+                    }
+
+                    is UiState.Idle -> {
+                        // Do nothing
                     }
                 }
             }
@@ -254,7 +300,7 @@ fun SearchScreenPreview() {
         val context = LocalContext.current
         val settingsDataStore = remember { SettingsDataStore(context) }
         val searchViewModel: SearchViewModel = viewModel(
-            factory = SearchViewModelFactory(settingsDataStore)
+            factory = SearchViewModelFactory(context, settingsDataStore)
         )
         SearchScreen(
             navController = rememberNavController(),

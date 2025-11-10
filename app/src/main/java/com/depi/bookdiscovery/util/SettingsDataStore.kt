@@ -50,7 +50,19 @@ class SettingsDataStore(context: Context) {
     suspend fun addToSearchHistory(query: String) {
         dataStore.edit { preferences ->
             val currentHistory = preferences[SEARCH_HISTORY] ?: emptySet()
-            preferences[SEARCH_HISTORY] = currentHistory + query
+            val newHistory = mutableListOf<String>()
+            newHistory.add(query)
+            newHistory.addAll(currentHistory.filter { it != query })
+            if (newHistory.size > 5) {
+                newHistory.removeLast()
+            }
+            preferences[SEARCH_HISTORY] = newHistory.toSet()
+        }
+    }
+
+    suspend fun clearSearchHistory() {
+        dataStore.edit { preferences ->
+            preferences.remove(SEARCH_HISTORY)
         }
     }
 }

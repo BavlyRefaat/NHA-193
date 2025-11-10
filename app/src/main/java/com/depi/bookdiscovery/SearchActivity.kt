@@ -20,6 +20,7 @@ class SearchActivity : ComponentActivity() {
                     navController = navController,
                     searchViewModel = viewModel(
                         factory = SearchViewModelFactory(
+                            applicationContext,
                             SettingsDataStore(applicationContext)
                         )
                     )
