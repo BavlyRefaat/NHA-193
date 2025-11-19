@@ -2,79 +2,86 @@ package com.depi.bookdiscovery.screens.main
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import coil.compose.rememberAsyncImagePainter
 import com.depi.bookdiscovery.R
-import com.depi.bookdiscovery.dto.Item
-import com.depi.bookdiscovery.ui.theme.YellowStar
+import com.depi.bookdiscovery.Screen
 import com.depi.bookdiscovery.ui.viewmodel.MainViewModel
 import com.depi.bookdiscovery.ui.viewmodel.SettingsViewModel
 import com.depi.bookdiscovery.ui.viewmodel.UiState
+import com.valentinilk.shimmer.shimmer
 
 data class Book(
-    val title: String,
+    val title: String?,
     val author: String,
-    val rating: Float,
-    val reviews: Int,
+    val rating: Float?,
+    val reviews: Int?,
     val cover: String?,
+    val isbn: String?,
 )
 
-data class Category(
+data class MainCategory(
     val name: String,
 )
 
 @Composable
 fun MainScreen(
+    navController: NavController,
     settingsViewModel: SettingsViewModel,
     mainViewModel: MainViewModel,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit
 ) {
     val categories = listOf(
-        Category("All"),
-        Category("Fiction"),
-        Category("Technology"),
-        Category("Science")
+        MainCategory("All"),
+        MainCategory("Fiction"),
+        MainCategory("Technology"),
+        MainCategory("Science")
     )
     var selectedCategory by remember { mutableStateOf(categories.first()) }
-
     val featuredBooksState by mainViewModel.featuredBooksState.collectAsStateWithLifecycle()
     val popularBooksState by mainViewModel.popularBooksState.collectAsStateWithLifecycle()
     val newReleasesState by mainViewModel.newReleasesState.collectAsStateWithLifecycle()
 
+    fun filterBooks(state: UiState<List<Book>>): UiState<List<Book>> {
+        return when (state) {
+            is UiState.Success -> {
+                val filtered = state.data.filter { book ->
+                    searchQuery.isBlank() ||
+                            book.title?.contains(searchQuery, ignoreCase = true) == true ||
+                            book.author.contains(searchQuery, ignoreCase = true)
+                }
+                UiState.Success(filtered)
+            }
+
+            else -> state
+        }
+    }
+
+    val filteredFeatured = filterBooks(featuredBooksState)
+    val filteredPopular = filterBooks(popularBooksState)
+    val filteredNewReleases = filterBooks(newReleasesState)
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -91,6 +98,24 @@ fun MainScreen(
             )
         }
         item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                label = { Text("Search for a book...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search Icon"
+                    )
+                },
+                singleLine = true
+            )
+        }
+
+        item {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -98,7 +123,19 @@ fun MainScreen(
                 items(categories) { category ->
                     FilterChip(
                         selected = category == selectedCategory,
-                        onClick = { selectedCategory = category },
+                        onClick = {
+                            if (category.name != "All") {
+                                navController.navigate(Screen.Categories.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            } else {
+                                selectedCategory = category
+                            }
+                        },
                         label = { Text(category.name) }
                     )
                 }
@@ -115,7 +152,10 @@ fun MainScreen(
             )
         }
         item {
-            BookSection(state = featuredBooksState) { book ->
+            BookSection(
+                state = filteredFeatured,
+                placeholder = { FeaturedBookCardPlaceholder() }
+            ) { book ->
                 FeaturedBookCard(book = book)
             }
         }
@@ -130,7 +170,10 @@ fun MainScreen(
             )
         }
         item {
-            BookSection(state = popularBooksState) { book ->
+            BookSection(
+                state = filteredPopular,
+                placeholder = { PopularBookCardPlaceholder() }
+            ) { book ->
                 PopularBookCard(book = book)
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -147,22 +190,30 @@ fun MainScreen(
             )
         }
         item {
-            BookSection(state = newReleasesState) { book ->
+            BookSection(
+                state = filteredNewReleases,
+                placeholder = { NewReleaseBookCardPlaceholder() }
+            ) { book ->
                 NewReleaseBookCard(book = book)
             }
         }
     }
 }
 
+
 @Composable
 fun BookSection(
-    state: UiState<List<Item>>,
+    state: UiState<List<Book>>,
+    placeholder: @Composable () -> Unit,
     content: @Composable (book: Book) -> Unit,
 ) {
     when (state) {
         is UiState.Loading -> {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            Row {
+                repeat(3) {
+                    placeholder()
+                    Spacer(modifier = Modifier.width(16.dp))
+                }
             }
         }
 
@@ -171,14 +222,7 @@ fun BookSection(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
-                items(state.data) { item ->
-                    val book = Book(
-                        title = item.volumeInfo?.title ?: "Unknown",
-                        author = item.volumeInfo?.authors?.joinToString(", ") ?: "Unknown",
-                        rating = item.volumeInfo?.averageRating ?: 0f,
-                        reviews = item.volumeInfo?.ratingsCount ?: 0,
-                        cover = item.volumeInfo?.imageLinks?.thumbnail
-                    )
+                items(state.data) { book ->
                     content(book)
                 }
             }
@@ -186,6 +230,10 @@ fun BookSection(
 
         is UiState.Error -> {
             Text(text = state.message, color = MaterialTheme.colorScheme.error)
+        }
+
+        is UiState.Idle -> {
+            // Do nothing
         }
     }
 }
@@ -195,12 +243,9 @@ fun FeaturedBookCard(book: Book) {
     Card(
         modifier = Modifier.width(200.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column {
+        Column(modifier = Modifier.fillMaxSize()) {
             Image(
                 painter = rememberAsyncImagePainter(model = book.cover),
                 contentDescription = book.title,
@@ -211,28 +256,18 @@ fun FeaturedBookCard(book: Book) {
             )
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = book.title,
+                    text = book.title ?: "No Title",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = book.author,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Rating",
-                        tint = YellowStar
-                    )
-                    Text(
-                        text = "${book.rating} (${book.reviews} reviews)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }
@@ -241,44 +276,37 @@ fun FeaturedBookCard(book: Book) {
 @Composable
 fun PopularBookCard(book: Book) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.width(300.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Row(modifier = Modifier.height(150.dp)) {
+        Row(
+            modifier = Modifier.height(150.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Image(
                 painter = rememberAsyncImagePainter(model = book.cover),
                 contentDescription = book.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.width(100.dp)
+                modifier = Modifier
+                    .width(100.dp)
+                    .fillMaxHeight()
             )
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = book.title,
+                    text = book.title ?: "No Title",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = book.author,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Rating",
-                        tint = YellowStar
-                    )
-                    Text(
-                        text = "${book.rating}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }
@@ -289,10 +317,7 @@ fun NewReleaseBookCard(book: Book) {
     Card(
         modifier = Modifier.width(120.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {
             Image(
@@ -305,31 +330,118 @@ fun NewReleaseBookCard(book: Book) {
             )
             Column(modifier = Modifier.padding(8.dp)) {
                 Text(
-                    text = book.title,
+                    text = book.title ?: "No Title",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = book.author,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Rating",
-                        tint = YellowStar,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "${book.rating}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FeaturedBookCardPlaceholder() {
+    Box(modifier = Modifier.shimmer()) {
+        Column(
+            modifier = Modifier
+                .width(200.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Gray)
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(250.dp)
+                    .fillMaxWidth()
+            )
+            Column(modifier = Modifier.padding(16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .height(24.dp)
+                        .fillMaxWidth(0.8f)
+                        .background(Color.LightGray)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .height(20.dp)
+                        .fillMaxWidth(0.5f)
+                        .background(Color.LightGray)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PopularBookCardPlaceholder() {
+    Box(modifier = Modifier.shimmer()) {
+        Row(
+            modifier = Modifier
+                .width(300.dp)
+                .height(150.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Gray)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .fillMaxHeight()
+            )
+            Column(modifier = Modifier.padding(16.dp)) {
+                Box(
+                    modifier = Modifier
+                        .height(24.dp)
+                        .fillMaxWidth(0.8f)
+                        .background(Color.LightGray)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .height(20.dp)
+                        .fillMaxWidth(0.5f)
+                        .background(Color.LightGray)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun NewReleaseBookCardPlaceholder() {
+    Box(modifier = Modifier.shimmer()) {
+        Column(
+            modifier = Modifier
+                .width(120.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Gray)
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(160.dp)
+                    .fillMaxWidth()
+            )
+            Column(modifier = Modifier.padding(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .height(20.dp)
+                        .fillMaxWidth(0.8f)
+                        .background(Color.LightGray)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .height(16.dp)
+                        .fillMaxWidth(0.5f)
+                        .background(Color.LightGray)
+                )
             }
         }
     }
